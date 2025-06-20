@@ -29,8 +29,8 @@ jobs:
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       DB_NAME: ${{ secrets.DB_NAME }}
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_HOST: localhost
+      DB_PORT: 5432
 
     steps:
       - name: Checkout code
@@ -44,5 +44,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Run DB migration
+        run: |
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -U $DB_USER -d $DB_NAME -f init.sql
+
       - name: Run tests
         run: npm test
+
