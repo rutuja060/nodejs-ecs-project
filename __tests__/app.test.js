@@ -1,25 +1,23 @@
 const request = require('supertest');
 const app = require('../index');
 
-describe('GET /health', () => {
-    it('should return API is healthy', async () => {
-      const res = await request(app).get('/health');
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('message', 'API is healthy!');
-    });
+describe('API Endpoints', () => {
+  it('should return health check', async () => {
+    const res = await request(app).get('/health');
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('message', 'API is healthy!');
   });
-  
 
-describe('POST /data', () => {
-  it('should return greeting message', async () => {
-    const res = await request(app).post('/data').send({ name: 'Rutuja' });
+  it('should create a new todo', async () => {
+    const res = await request(app).post('/todos').send({ task: 'Test Docker' });
     expect(res.statusCode).toEqual(201);
-    expect(res.body).toHaveProperty('message', 'Hello, Rutuja');
+    expect(res.body).toHaveProperty('task', 'Test Docker');
+    expect(res.body).toHaveProperty('completed', false);
   });
 
-  it('should return error if name is missing', async () => {
-    const res = await request(app).post('/data').send({});
+  it('should fail to create todo if task is missing', async () => {
+    const res = await request(app).post('/todos').send({});
     expect(res.statusCode).toEqual(400);
-    expect(res.body).toHaveProperty('error', 'Name is required');
+    expect(res.body).toHaveProperty('error', 'Task is required');
   });
 });

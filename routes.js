@@ -47,4 +47,12 @@ router.delete('/todos/:id', async (req, res) => {
   res.json(result.rows[0]);
 });
 
+router.post('/data', (req, res) => {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    res.status(201).json({ message: `Hello, ${name}` });
+  });
+
 module.exports = router;
