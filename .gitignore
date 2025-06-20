@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Docker files
+*.pid
+*.sock
+
+# OS files
+.DS_Store
+
+# Optional: ignore test coverage reports
+coverage/
+
+# Local database files or volumes (if any)
+db-data/
