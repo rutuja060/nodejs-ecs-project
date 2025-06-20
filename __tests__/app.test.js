@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../index');
+const pool = require('../db'); // make sure this is your pg pool
 
 describe('API Endpoints', () => {
   it('should return health check', async () => {
@@ -33,4 +34,8 @@ describe('API Endpoints', () => {
     expect(res.body).toHaveProperty('error', 'Name is required');
   });
   
+});
+
+afterAll(async () => {
+  await pool.end(); // closes DB connection
 });
