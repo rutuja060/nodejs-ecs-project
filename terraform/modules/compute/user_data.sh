@@ -34,3 +34,8 @@ docker run -d \
   -e DB_HOST=$DB_HOST \
   -p 3000:3000 \
   ${account_id}.dkr.ecr.${region}.amazonaws.com/${ecr_repo_url}:${docker_image_tag}
+
+  # Wait a few seconds for the app to boot, then write logs
+sleep 10
+docker ps > /var/log/docker_ps.log
+docker logs $(docker ps -q) > /var/log/app_logs.log
