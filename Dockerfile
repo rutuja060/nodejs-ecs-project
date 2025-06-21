@@ -1,20 +1,27 @@
-# Use minimal image
+# Use a specific version of Node on Alpine Linux
 FROM node:18-alpine
 
-# Create app directory
+# Set the working directory
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency definitions
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install 
 
-# Copy app code
+# Copy the rest of the application source code
 COPY . .
 
-# Expose the port
+# Set the environment to production
+ENV PORT=3000
+
+# Create and switch to a non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+# Expose the application port
 EXPOSE 3000
 
-# Run the app
-CMD ["npm", "start"]
+# The command to run the application
+CMD ["node", "index.js"]
