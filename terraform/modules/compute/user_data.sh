@@ -1,41 +1,45 @@
 #!/bin/bash -xe
 
 # Update packages and install Docker
-yum update -y
-amazon-linux-extras install docker -y
-service docker start
+dnf update -y
+dnf install -y docker jq unzip curl
+
+# Start Docker and enable it on boot
+systemctl enable docker
+systemctl start docker
 usermod -a -G docker ec2-user
 
-# Install jq to easily parse JSON from Secrets Manager
-yum install -y jq
+# Install SSM Agent (AL3 doesn't come with it by default)
+dnf install -y https://s3.${region}.amazonaws.com/amazon-ssm-${region}/latest/linux_amd64/amazon-ssm-agent.rpm
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
 
-# Use the EC2 instance's IAM role to log in to ECR
-aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${ecr_repo_url}
+# Log in to ECR
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
 
-# Fetch the database credentials from Secrets Manager
+# Fetch secrets from AWS Secrets Manager
 secrets=$(aws secretsmanager get-secret-value --secret-id ${secret_name} --region ${region} --query SecretString --output text)
 
-# Parse the secrets and export them as environment variables
-# Note: The keys (.username, .password) must match what you stored in Secrets Manager
+# Extract DB credentials from secrets
 DB_USER=$(echo "$secrets" | jq -r .username)
 DB_PASSWORD=$(echo "$secrets" | jq -r .password)
 DB_HOST=$(echo "$secrets" | jq -r .host)
 DB_NAME=$(echo "$secrets" | jq -r .dbname)
 DB_PORT=$(echo "$secrets" | jq -r .port)
 
-# Pull Docker image with version
+# Pull and run Docker container
 docker pull ${account_id}.dkr.ecr.${region}.amazonaws.com/${ecr_repo_url}:${docker_image_tag}
 
-# Run Docker container with environment variables
 docker run -d \
-  -e DB_USER=$DB_USER \
-  -e DB_PASSWORD=$DB_PASSWORD \
-  -e DB_NAME=$DB_NAME \
-  -e DB_HOST=$DB_HOST \
+  -e POSTGRES_USER=$DB_USER \
+  -e POSTGRES_PASSWORD=$DB_PASSWORD \
+  -e POSTGRES_HOST=$DB_HOST \
+  -e POSTGRES_DB=$DB_NAME \
+  -e POSTGRES_PORT=$DB_PORT \
   -p 3000:3000 \
   ${account_id}.dkr.ecr.${region}.amazonaws.com/${ecr_repo_url}:${docker_image_tag}
 
-  # Wait a few seconds for the app to boot, then write logs
+# Logging
 sleep 10
 docker ps > /var/log/docker_ps.log
 docker logs $(docker ps -q) > /var/log/app_logs.log
