@@ -53,6 +53,6 @@ jobs:
       - name: Force refresh EC2 instances in Auto Scaling Group
         run: |
           aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name your-asg-name \
+            --auto-scaling-group-name app-asg \
             --region $AWS_REGION
 
