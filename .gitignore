@@ -21,3 +21,12 @@ coverage/
 
 # Local database files or volumes (if any)
 db-data/
+
+
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfplan
+crash.log
+.terraform.lock.hcl
