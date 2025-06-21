@@ -10,7 +10,7 @@ jobs:
 
     env:
       AWS_REGION: ap-south-1
-      ECR_REPO: your-ecr-repo-name
+      ECR_REPO: nodejs-ecs-project
       IMAGE_TAG: latest
 
     steps:
