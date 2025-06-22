@@ -31,6 +31,9 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   max: 20, // Maximum number of clients in the pool
   min: 2,  // Minimum number of clients in the pool
+  ssl: {
+    rejectUnauthorized: false // Required for RDS SSL connections
+  }
 });
 
 // Handle pool errors
