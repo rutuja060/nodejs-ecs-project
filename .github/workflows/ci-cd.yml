@@ -114,8 +114,8 @@ jobs:
     
     - name: Upload deployment package to S3
       run: |
-        aws s3 cp deployment-package.tar.gz s3://${{ secrets.S3_BUCKET }}/deployments/
-        aws s3 cp image-tag.txt s3://${{ secrets.S3_BUCKET }}/
+        aws s3 cp deployment-package.tar.gz s3://${{ secrets.S3_BUCKET }}/deployments/ --sse AES256
+        aws s3 cp image-tag.txt s3://${{ secrets.S3_BUCKET }}/ --sse AES256
     
     - name: Create CodeDeploy deployment
       run: |
