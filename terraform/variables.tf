@@ -109,3 +109,9 @@ variable "s3_bucket" {
   type        = string
 }
 
+variable "alert_email" {
+  description = "Email address for CloudWatch alerts and notifications"
+  type        = string
+  default     = ""
+}
+

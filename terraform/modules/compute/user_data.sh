@@ -1,4 +1,4 @@
-#!/bin/bash -xe
+#!/bin/bash 
 
 # Update packages and install Docker
 sudo dnf update -y
@@ -9,8 +9,10 @@ sudo systemctl enable docker
 sudo systemctl start docker
 sudo usermod -a -G docker ec2-user
 
-# Install SSM Agent (AL3 doesn't come with it by default)
-sudo dnf install -y https://s3.${region}.amazonaws.com/amazon-ssm-${region}/latest/linux_amd64/amazon-ssm-agent.rpm
+# Install SSM Agent
+# Define URL in a variable for clarity and safety
+SSM_AGENT_URL="https://s3.${region}.amazonaws.com/amazon-ssm-${region}/latest/linux_amd64/amazon-ssm-agent.rpm"
+sudo dnf install -y "$SSM_AGENT_URL"
 sudo systemctl enable amazon-ssm-agent
 sudo systemctl start amazon-ssm-agent
 
@@ -18,7 +20,10 @@ sudo systemctl start amazon-ssm-agent
 cd /home/ec2-user
 wget https://aws-codedeploy-${region}.s3.${region}.amazonaws.com/latest/install
 chmod +x ./install
-sudo ./install auto -r ${region}
+
+# The '-r' flag is not supported on AL2/AL3, the region is detected automatically.
+sudo ./install auto
+
 sudo systemctl start codedeploy-agent
 sudo systemctl enable codedeploy-agent
 
@@ -40,7 +45,7 @@ secrets=$(aws secretsmanager get-secret-value --secret-id ${secret_name} --regio
 # Extract DB credentials from secrets
 DB_USER=$(echo "$secrets" | jq -r .username)
 DB_PASSWORD=$(echo "$secrets" | jq -r .password)
-DB_HOST=$(echo "$secrets" | jq -r .host)
+DB_HOST=$(echo "$secrets" | jq -r .host | cut -d: -f1)
 DB_NAME=$(echo "$secrets" | jq -r .dbname)
 DB_PORT=$(echo "$secrets" | jq -r .port)
 
@@ -50,7 +55,7 @@ if sudo docker ps -q --filter "name=nodejs-app" | grep -q .; then
     sudo docker rm nodejs-app || true
 fi
 
-# Pull and run Docker container
+# Pull and run Docker container with CloudWatch logging
 sudo docker pull ${account_id}.dkr.ecr.${region}.amazonaws.com/${ecr_repo_name}:${docker_image_tag}
 
 sudo docker run -d --name nodejs-app \
@@ -59,6 +64,11 @@ sudo docker run -d --name nodejs-app \
   -e DB_HOST=$DB_HOST \
   -e DB_NAME=$DB_NAME \
   -e DB_PORT=$DB_PORT \
+  -e NODE_ENV=production \
+  --log-driver=awslogs \
+  --log-opt awslogs-region=${region} \
+  --log-opt awslogs-group="/ec2/nodejs-app" \
+  --log-opt awslogs-stream="instance-$(curl -s http://169.254.169.254/latest/meta-data/instance-id)" \
   -p 3000:3000 \
   ${account_id}.dkr.ecr.${region}.amazonaws.com/${ecr_repo_name}:${docker_image_tag}
 

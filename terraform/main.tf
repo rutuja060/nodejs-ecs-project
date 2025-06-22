@@ -83,3 +83,15 @@ module "compute" {
   # CodeDeploy configuration
   codedeploy_service_role_arn = module.iam.codedeploy_service_role_arn
 }
+
+module "monitoring" {
+  source = "./modules/monitoring"
+  
+  project_name     = var.project_name
+  region           = var.aws_region
+  asg_name         = module.compute.asg_name
+  alb_arn_suffix   = module.compute.alb_arn_suffix
+  rds_instance_id  = module.rds.db_instance_id
+  log_group_name   = "/ec2/nodejs-app"
+  alert_email      = var.alert_email
+}
