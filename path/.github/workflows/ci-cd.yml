@@ -1,0 +1,205 @@
+# This workflow defines the CI/CD pipeline for the Node.js application.
+name: CI/CD Pipeline with CodeDeploy
+
+# Controls when the workflow will run
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+# Environment variables available to all jobs
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: nodejs-ecs-project
+  APPLICATION_NAME: nodejs-app
+  DEPLOYMENT_GROUP_NAME: nodejs-app-deployment-group
+
+jobs:
+  #------------------------------------------------
+  # 1. TEST JOB: Runs unit tests
+  #------------------------------------------------
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db # Typo fixed here
+        ports:
+          - 5432:5432
+        # Health check to ensure the database is ready before tests run
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Dependencies
+        run: npm ci
+      
+      - name: Run Tests
+        run: npm test
+        env:
+          DB_USER: test_user
+          DB_PASSWORD: test_password
+          DB_HOST: localhost
+          DB_NAME: test_db
+          DB_PORT: 5432
+          PORT: 3000
+
+  #------------------------------------------------
+  # 2. BUILD JOB: Builds and pushes Docker image
+  #------------------------------------------------
+  build-and-push:
+    name: Build and Push to ECR
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Generate Image Tag
+        id: image-tag
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build, Tag, and Push Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+      
+      - name: Save Image Tag for Deployment
+        run: echo "${{ env.IMAGE_TAG }}" > image-tag.txt
+
+      - name: Upload Image Tag as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tag-artifact
+          path: image-tag.txt
+
+  #------------------------------------------------
+  # 3. DEPLOY JOB: Deploys application via CodeDeploy
+  #------------------------------------------------
+  deploy:
+    name: Deploy to EC2 with CodeDeploy
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Image Tag Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag-artifact
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Create Deployment Package
+        run: |
+          mkdir -p deployment
+          cp -r scripts deployment/
+          cp appspec.yml deployment/
+          cp image-tag.txt deployment/
+          tar -czf deployment-package.tar.gz -C deployment .
+      
+      - name: Upload Deployment Package to S3
+        run: aws s3 cp deployment-package.tar.gz s3://${{ secrets.S3_BUCKET }}/deployments/deployment-package.tar.gz --sse AES256
+      
+      - name: Create and Wait for CodeDeploy Deployment
+        run: |
+          echo "Creating deployment..."
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name ${{ env.APPLICATION_NAME }} \
+            --deployment-group-name ${{ env.DEPLOYMENT_GROUP_NAME }} \
+            --s3-location bucket=${{ secrets.S3_BUCKET }},key=deployments/deployment-package.tar.gz,bundleType=tar \
+            --deployment-config-name CodeDeployDefault.OneAtATime \
+            --description "Deployment from GitHub Actions - ${{ github.sha }}" \
+            --query 'deploymentId' --output text)
+
+          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" == "None" ]; then
+            echo "::error::Failed to create deployment or get deployment ID."
+            exit 1
+          fi
+
+          echo "Waiting for deployment $DEPLOYMENT_ID to complete..."
+          aws deploy wait deployment-successful --deployment-id $DEPLOYMENT_ID
+
+          if [ $? -ne 0 ]; then
+            echo "::error::Deployment failed! See details below."
+            aws deploy get-deployment --deployment-id $DEPLOYMENT_ID --query 'deploymentInfo.errorInformation'
+            exit 1
+          fi
+          
+          echo "Deployment completed successfully!"
+
+  #------------------------------------------------
+  # 4. ROLLBACK JOB: Runs on deployment failure
+  #------------------------------------------------
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Rollback Deployment
+        run: |
+          echo "Deployment failed, initiating rollback..."
+          # NOTE: This is a basic rollback. A robust solution would dynamically find the last
+          # successful deployment revision instead of using a hardcoded S3 key.
+          aws deploy create-deployment \
+            --application-name ${{ env.APPLICATION_NAME }} \
+            --deployment-group-name ${{ env.DEPLOYMENT_GROUP_NAME }} \
+            --revision revisionType=S3,s3Location={bucket=${{ secrets.S3_BUCKET }},key=deployments/previous-deployment.tar.gz,bundleType=tar} \
+            --deployment-config-name CodeDeployDefault.OneAtATime \
+            --description "Automatic Rollback due to failure" 
