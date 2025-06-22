@@ -10,9 +10,29 @@ fi
 IMAGE_TAG=$(cat "$IMAGE_TAG_FILE")
 
 # Source environment variables created by user_data
+echo "--> Checking for environment file..."
 if [ -f /etc/codedeploy-environment ]; then
+  echo "--> Sourcing /etc/codedeploy-environment..."
+  cat /etc/codedeploy-environment # Print file content for debugging
   . /etc/codedeploy-environment
+else
+  echo "--> ERROR: /etc/codedeploy-environment file not found!"
+  exit 1
 fi
+
+# ---
+# Validate that essential variables are set
+# ---
+echo "--> Validating environment variables..."
+if [ -z "${REGION}" ] || [ -z "${ACCOUNT_ID}" ] || [ -z "${ECR_REPO_NAME}" ]; then
+    echo "--> ERROR: One or more required environment variables (REGION, ACCOUNT_ID, ECR_REPO_NAME) are not set."
+    echo "    REGION: ${REGION}"
+    echo "    ACCOUNT_ID: ${ACCOUNT_ID}"
+    echo "    ECR_REPO_NAME: ${ECR_REPO_NAME}"
+    exit 1
+fi
+echo "--> Variables are set. REGION is ${REGION}."
+
 
 # Log in to Amazon ECR
 aws ecr get-login-password --region ${REGION} | sudo docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
