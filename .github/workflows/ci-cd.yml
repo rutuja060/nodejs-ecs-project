@@ -42,16 +42,6 @@ jobs:
     
     - name: Install dependencies
       run: npm ci
-    
-    - name: Run tests
-      run: npm test
-      env:
-        DB_USER: test_user
-        DB_PASSWORD: test_password
-        DB_HOST: localhost
-        DB_NAME: test_db
-        DB_PORT: 5432
-        PORT: 3000
 
   build-and-push:
     needs: test

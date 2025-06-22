@@ -11,8 +11,19 @@ describe('API Endpoints', () => {
       await pool.query('SELECT 1');
       dbAvailable = true;
       console.log('Database connected successfully');
+      
+      // Create the todos table if it doesn't exist
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS todos (
+          id SERIAL PRIMARY KEY,
+          task TEXT NOT NULL,
+          completed BOOLEAN DEFAULT false
+        );
+      `);
+      console.log('Todos table created/verified successfully');
     } catch (error) {
       console.log('Database not available in CI/CD environment - skipping database tests');
+      console.log('Error:', error.message);
       dbAvailable = false;
     }
   });
