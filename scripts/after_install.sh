@@ -28,11 +28,4 @@ if ! command -v jq &> /dev/null; then
     sudo yum install -y jq
 fi
 
-# Create environment file for CodeDeploy
-echo "Creating CodeDeploy environment file..."
-sudo tee /etc/codedeploy-environment > /dev/null <<EOF
-# Environment variables for CodeDeploy
-# These will be set by the user_data script or manually
-EOF
-
 echo "AfterInstall hook completed successfully." 
