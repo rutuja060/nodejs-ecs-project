@@ -23,7 +23,8 @@ variable "secret_name" {}
 variable "region" {}
 variable "instance_profile_name" {}
 
-
 variable "ecr_image" {}        # full image name including tag
-variable "ecr_repo_url" {}     # just the ECR registry URL
-variable "docker_image_tag" {}     # just the ECR registry URL
+variable "ecr_repo_name" {}    # ECR repository name
+variable "docker_image_tag" {} # just the image tag
+
+variable "codedeploy_service_role_arn" {}

@@ -7,8 +7,7 @@ resource "aws_launch_template" "app" {
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
     region           = var.region
     secret_name      = var.secret_name
-    ecr_image        = var.ecr_image
-    ecr_repo_url     = var.ecr_repo_url
+    ecr_repo_name    = var.ecr_repo_name
     account_id       = var.account_id
     docker_image_tag = var.docker_image_tag
   }))
@@ -35,6 +34,24 @@ resource "aws_launch_template" "app" {
   }
 }
 
+# Automatically set the latest version as default
+resource "null_resource" "set_default_version" {
+  triggers = {
+    launch_template_id = aws_launch_template.app.id
+    latest_version     = aws_launch_template.app.latest_version
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws ec2 modify-launch-template \
+        --launch-template-id ${aws_launch_template.app.id} \
+        --default-version ${aws_launch_template.app.latest_version}
+    EOT
+  }
+
+  depends_on = [aws_launch_template.app]
+}
+
 resource "aws_autoscaling_group" "app" {
   name                      = "app-asg"
   desired_capacity          = var.desired_capacity
@@ -44,7 +61,7 @@ resource "aws_autoscaling_group" "app" {
 
   launch_template {
     id      = aws_launch_template.app.id
-    version = "$Latest"
+    version = "$Default"
   }
 
   target_group_arns         = [aws_lb_target_group.app_tg.arn]
@@ -54,6 +71,12 @@ resource "aws_autoscaling_group" "app" {
   tag {
     key                 = "Name"
     value               = "app-instance"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "CodeDeploy"
+    value               = "true"
     propagate_at_launch = true
   }
 }
@@ -91,5 +114,40 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app_tg.arn
+  }
+}
+
+resource "aws_codedeploy_app" "app" {
+  compute_platform = "Server"
+  name             = "nodejs-app"
+}
+
+resource "aws_codedeploy_deployment_group" "app" {
+  app_name               = aws_codedeploy_app.app.name
+  deployment_group_name  = "nodejs-app-deployment-group"
+  service_role_arn       = var.codedeploy_service_role_arn
+
+  ec2_tag_set {
+    ec2_tag_filter {
+      key   = "CodeDeploy"
+      type  = "KEY_AND_VALUE"
+      value = "true"
+    }
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "IN_PLACE"
+  }
+
+  load_balancer_info {
+    target_group_info {
+      name = aws_lb_target_group.app_tg.name
+    }
   }
 }

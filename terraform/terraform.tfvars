@@ -23,6 +23,7 @@ availability_zones = [
 db_name     = "nodejsdb"
 db_user     = "nodejsuser"
 db_password = "MySecurePass-622"
+db_port = "5432"
 
 region        = "ap-south-1"
 secret_name   = "nodejs-app-secret"
@@ -34,3 +35,6 @@ key_name        = "nodejs-demo"
 desired_capacity = 1
 max_size        = 4
 min_size        = 1
+
+s3_bucket = "nodejs-app-scripts-bucket"
+docker_image_tag = "latest" 

@@ -32,10 +32,17 @@ module "secrets" {
   db_port      = var.db_port
 }
 
+module "s3" {
+  source       = "./modules/s3"
+  bucket_name  = var.s3_bucket
+  environment  = "dev"
+}
+
 module "iam" {
   source      = "./modules/iam"
   region      = var.region
   secret_name = var.secret_name
+  s3_bucket   = module.s3.bucket_name
 }
 
 module "ecr" {
@@ -70,6 +77,9 @@ module "compute" {
   
   # ECR configuration
   ecr_image        = "${module.ecr.repository_url}:${var.docker_image_tag}"
-  ecr_repo_url     = module.ecr.repository_url
+  ecr_repo_name    = module.ecr.repository_name
   docker_image_tag = var.docker_image_tag
+  
+  # CodeDeploy configuration
+  codedeploy_service_role_arn = module.iam.codedeploy_service_role_arn
 }

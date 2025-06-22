@@ -104,3 +104,8 @@ variable "docker_image_tag" {
   default     = "latest"
 }
 
+variable "s3_bucket" {
+  description = "S3 bucket name for CodeDeploy artifacts"
+  type        = string
+}
+
